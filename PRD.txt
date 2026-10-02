@@ -1,0 +1,1753 @@
+# Personal Experience Layer
+
+**Version:** 0.2  
+**Status:** Product Definition  
+**Working description:** Persistent experience infrastructure for future agents.
+
+**Tagline:**
+
+> **Turn everything you do with AI into reusable experience for every future agent.**
+
+---
+
+# 1. Problem
+
+A growing amount of meaningful work is completed collaboratively with AI:
+
+- software engineering;
+- research;
+- experiments;
+- performance optimization;
+- coursework;
+- competitions;
+- analysis;
+- debugging;
+- writing;
+- planning.
+
+During this work, the human-agent system generates valuable private experience:
+
+```text
+what was attempted
+what failed
+what worked
+what changed
+why a decision was made
+which artifacts mattered
+which environment constraints mattered
+how success was evaluated
+what should be repeated
+what should never be repeated
+```
+
+Today, most of this information dies with the working session.
+
+What survives is usually:
+
+```text
+final code
+final document
+final submission
+final result
+```
+
+What is lost is the **experience required to reach it**.
+
+Therefore every new agent repeatedly pays a:
+
+# Context Reconstruction Tax
+
+The user must explain:
+
+- what has already happened;
+- why the project looks this way;
+- what approaches have already failed;
+- which decisions are deliberate;
+- what tools/resources exist;
+- how this kind of task should be evaluated;
+- which patterns from previous projects should be reused.
+
+This remains true even if the next agent is more capable than the previous one.
+
+---
+
+# 2. Product Thesis
+
+The valuable private asset created through AI-assisted work is not the transcript.
+
+It is:
+
+# accumulated reusable experience
+
+The system should transform:
+
+```text
+Human + Agent work
+        ↓
+Experience
+        ↓
+Reusable Experience
+        ↓
+Future Agent
+```
+
+The fundamental loop is:
+
+```text
+Observe
+   ↓
+Extract
+   ↓
+Consolidate
+   ↓
+Retrieve
+   ↓
+Compile
+   ↓
+Act
+   ↓
+Feedback
+   └──────────────→ back into experience
+```
+
+The system succeeds when:
+
+> A future agent behaves as if it had participated in the user's previous relevant work.
+
+---
+
+# 3. Core Product Definition
+
+Personal Experience Layer is:
+
+> **An agent-agnostic persistent layer that automatically converts past human-agent work into scoped, evidence-linked reusable experience, then compiles the relevant subset into actionable context for future agents.**
+
+It lives conceptually between:
+
+```text
+               Human
+                 │
+          current objective
+                 │
+                 ▼
+       Personal Experience Layer
+                 │
+         relevant experience
+                 │
+                 ▼
+      any current frontier agent
+                 │
+                 ▼
+               Work
+                 │
+            new evidence
+                 │
+                 └──────────────→ Experience Layer
+```
+
+---
+
+# 4. Primary User Goal
+
+The primary user need is:
+
+> **I have already spent time working through this or something related. My next agent should inherit that experience without me manually rebuilding context.**
+
+The primary user is **not**:
+
+> someone maintaining a second brain.
+
+The user should continue working normally.
+
+The product should harvest value from that work automatically.
+
+---
+
+# 5. Non-Goals
+
+The product is not primarily:
+
+```text
+a chat history archive
+a note-taking application
+a second brain
+a personal knowledge-management UI
+a vector database
+an MCP server
+an agent runtime
+a life operating system
+a coding-only memory plugin
+a human skill-assessment system
+```
+
+All of these may connect to the system.
+
+None defines the core product.
+
+---
+
+# 6. Key Design Correction: Task Success ≠ Human Learning
+
+The system may optionally track human learning in educational contexts.
+
+However:
+
+```text
+human mastery
+```
+
+is **not a foundational product requirement**.
+
+The primary question is not:
+
+> Did the human learn this?
+
+The primary question is:
+
+> What happened here that would be useful to a future agent?
+
+For example:
+
+```text
+Codex implemented an NTT optimization.
+```
+
+The system should capture:
+
+```text
+which implementation worked
+why
+what failed before it
+benchmark evidence
+relevant constraints
+reusable code/artifacts
+```
+
+Whether the user could independently reproduce the NTT implementation is optional metadata for a learning application.
+
+It must not block experience persistence.
+
+---
+
+# 7. Key Design Correction: Human Review Is Not a Persistence Gate
+
+Requiring approval for every memory defeats the purpose of automatic accumulation.
+
+The system therefore follows:
+
+# Persist first, trust proportionally.
+
+Example:
+
+```text
+Benchmark observation
+tile=128
+24.1 µs
+Ascend 910B3
+workload X
+```
+
+This is factual telemetry.
+
+It may be stored automatically.
+
+The system might infer:
+
+```text
+"Larger tiles are generally better for ragged reductions."
+```
+
+That is a generalized heuristic.
+
+It should also persist, but as:
+
+```text
+status: candidate
+confidence: low
+scope: workload X / similar workloads
+derived_from: benchmark #184
+```
+
+Human review can:
+
+```text
+correct
+promote
+narrow scope
+reject
+pin
+```
+
+but routine persistence must not depend on manual approval.
+
+The product principle is:
+
+```text
+Human review = correction / governance
+
+not
+
+Human review = data entry
+```
+
+---
+
+# 8. Experience Model
+
+The core object is an **Experience Unit**.
+
+An Experience Unit represents something learned from work that may matter later.
+
+It contains:
+
+```text
+Experience {
+    type
+    statement
+
+    scope
+    confidence
+
+    evidence[]
+    provenance[]
+
+    related_tasks[]
+    related_artifacts[]
+
+    created_at
+    last_observed_at
+
+    supersedes[]
+    contradicted_by[]
+
+    lifecycle_state
+}
+```
+
+---
+
+# 9. Experience Types
+
+The initial ontology should remain small.
+
+## 9.1 State
+
+Current project or environment state.
+
+Example:
+
+```text
+FISHASH has been run for all 15 samples.
+```
+
+Future agents need this to avoid repeating completed work.
+
+---
+
+## 9.2 Decision
+
+A deliberate choice plus rationale.
+
+```text
+Use barcode-split reproducibility in addition to
+FR-Perturb random-cell cross-validation.
+```
+
+Useful fields:
+
+```text
+decision
+reason
+alternatives
+constraints
+status
+```
+
+---
+
+## 9.3 Outcome
+
+A concrete result from an action or experiment.
+
+```text
+Tiling B improved latency by 14.2%.
+```
+
+Outcome should retain conditions.
+
+---
+
+## 9.4 Failure / Trap
+
+A failed approach or recurrent hazard.
+
+```text
+Increasing global timeout fixed the local symptom
+but produced flaky CI.
+```
+
+Negative experience is first-class.
+
+---
+
+## 9.5 Heuristic
+
+A scoped reusable rule of thumb.
+
+```text
+For workload family X, test strategy B before strategy C.
+```
+
+Heuristics can strengthen or narrow as evidence accumulates.
+
+---
+
+## 9.6 Procedure / Skill
+
+A reusable multi-step method.
+
+```text
+Performance optimization:
+baseline
+→ correctness oracle
+→ profile
+→ classify bottleneck
+→ formulate hypothesis
+→ benchmark
+→ regression check
+```
+
+Existing Agent Skills standards may eventually be used as one export format.
+
+---
+
+## 9.7 Evaluator
+
+A reusable definition of "good".
+
+Example:
+
+```text
+ORF assignment comparison:
+- per-cell barcode burden
+- ORFs per cell
+- unassigned fraction
+- barcode abundance extremes
+- batch/group effects
+- reproducibility
+```
+
+Evaluators are particularly valuable because they allow future agents to test their own work.
+
+---
+
+## 9.8 Environment / Capability
+
+Relevant execution context.
+
+Examples:
+
+```text
+Ascend 910B3 available on workstation X.
+Cell Ranger version Y is installed.
+dataset Z resides at ...
+```
+
+---
+
+## 9.9 Artifact Reference
+
+A durable pointer to a useful artifact.
+
+Examples:
+
+```text
+verified NTT implementation
+benchmark dataset
+working analysis script
+final experiment configuration
+```
+
+The experience layer should reference artifacts rather than unnecessarily duplicate them.
+
+---
+
+# 10. Episode
+
+Raw work should first be normalized into an Episode.
+
+```text
+Episode {
+    objective
+    context
+
+    actions[]
+    attempts[]
+    corrections[]
+
+    artifacts[]
+    feedback[]
+
+    outcome
+    evidence[]
+
+    participants[]
+    timestamps
+}
+```
+
+An Episode answers:
+
+> What happened?
+
+It may come from:
+
+```text
+Codex trajectory
+Claude Code
+ChatGPT
+terminal session
+Git
+benchmark log
+experiment notebook
+course interaction
+submission system
+```
+
+---
+
+# 11. Experience Extraction
+
+Conceptual API:
+
+```text
+extract(episode)
+    → experience_candidates[]
+```
+
+Extraction should look for:
+
+```text
+important decisions
+successful outcomes
+failed approaches
+human corrections
+agent corrections
+repeated friction
+environment constraints
+reusable procedures
+evaluation methods
+artifact references
+unresolved questions
+```
+
+Most conversation text should be discarded.
+
+A useful extraction system should prefer:
+
+```text
+10 high-value experiences
+```
+
+over:
+
+```text
+500 session summaries
+```
+
+---
+
+# 12. Consolidation
+
+This is a major product differentiator.
+
+Individual experiences should not accumulate forever as isolated memories.
+
+The system continuously performs:
+
+```text
+consolidate(experience_set)
+```
+
+Possible operations:
+
+### Merge
+
+```text
+three equivalent observations
+→ one consolidated experience
+```
+
+### Reinforce
+
+```text
+same heuristic succeeds repeatedly
+→ confidence increases
+```
+
+### Narrow
+
+```text
+heuristic works only under conditions X/Y
+→ scope becomes more specific
+```
+
+### Generalize
+
+```text
+similar pattern succeeds across projects
+→ broader reusable experience
+```
+
+### Contradict
+
+```text
+new evidence conflicts with old rule
+→ both retained with conflict relation
+```
+
+### Supersede
+
+```text
+new project state replaces old state
+```
+
+### Archive
+
+```text
+experience is obsolete or irrelevant
+→ remove from normal retrieval
+```
+
+No history needs to be physically destroyed to stop affecting agents.
+
+---
+
+# 13. Scope Model
+
+Experience is always scoped.
+
+Initial scopes:
+
+```text
+Task
+Project
+Domain
+Personal
+```
+
+Example:
+
+```text
+Task:
+tile=128 beat tile=64 on kernel X
+
+        ↓ repeated evidence
+
+Project:
+larger tile works for this kernel family
+
+        ↓ independent evidence
+
+Domain:
+for ragged reductions satisfying A/B/C,
+consider this tiling strategy early
+```
+
+Generalization should be earned by evidence.
+
+A single task should not silently become a global rule.
+
+---
+
+# 14. Provenance and Evidence
+
+Every derived experience should be traceable.
+
+```text
+Experience
+    ↓
+Evidence
+    ↓
+Episode
+    ↓
+Source
+```
+
+Evidence classes may include:
+
+```text
+benchmark
+test
+accepted submission
+experiment result
+human correction
+external feedback
+git diff
+runtime result
+agent inference
+```
+
+Different evidence types have different strength.
+
+Critical distinction:
+
+```text
+Observed:
+test passed
+
+Derived:
+therefore method X is reliable
+
+Speculative:
+X may generalize to Y
+```
+
+All three may persist.
+
+They must not be represented with equal confidence.
+
+---
+
+# 15. Human Feedback Model
+
+Human feedback is high-value evidence but should be sparse.
+
+The product should learn from interactions such as:
+
+```text
+"no, that's wrong"
+"this is important"
+"don't do this again"
+"this worked"
+"this only applies to project X"
+```
+
+These corrections should have disproportionately high influence.
+
+The system should not require the user to open a memory dashboard to encode them.
+
+---
+
+# 16. Retrieval
+
+Naïve retrieval is:
+
+```text
+query
+→ embedding search
+→ top-k memories
+```
+
+This is insufficient.
+
+The required function is:
+
+```text
+retrieve(
+    task,
+    current_project,
+    agent,
+    context_budget
+)
+```
+
+Retrieval must consider:
+
+```text
+semantic relevance
+scope
+freshness
+confidence
+causal dependency
+evidence quality
+previous failures
+current environment
+task phase
+```
+
+---
+
+# 17. Context Compilation
+
+Retrieval output should not be dumped directly into the prompt.
+
+The system performs:
+
+```text
+compile(task, retrieved_experience)
+```
+
+to produce agent-consumable behavior.
+
+Example output:
+
+```text
+Relevant prior state
+- ...
+
+Decisions that should not be revisited without new evidence
+- ...
+
+Known failed approaches
+- ...
+
+Useful heuristics
+- ...
+
+Applicable procedure
+- ...
+
+Required evaluator
+- ...
+
+Existing artifacts
+- ...
+
+Environment constraints
+- ...
+```
+
+The goal is:
+
+# Minimum Sufficient Experience
+
+not:
+
+# Maximum Available Memory
+
+---
+
+# 18. Multiple Output Forms
+
+Different experience should be compiled differently.
+
+A future agent may receive:
+
+```text
+brief
+```
+
+for temporary task context.
+
+Or:
+
+```text
+rule
+```
+
+for persistent project behavior.
+
+Or:
+
+```text
+skill
+```
+
+for a reusable procedure.
+
+Or:
+
+```text
+evaluator
+```
+
+for automated verification.
+
+Or:
+
+```text
+artifact pointer
+```
+
+for something already implemented.
+
+This is a key distinction from generic memory retrieval.
+
+The layer does not merely answer:
+
+> Which text is relevant?
+
+It decides:
+
+> **How should this experience affect the next agent?**
+
+---
+
+# 19. Agent-Agnostic Architecture
+
+The persistent layer belongs to the user.
+
+Agents are interchangeable execution engines.
+
+```text
+                Personal Experience Layer
+                         │
+       ┌─────────────────┼──────────────────┐
+       ▼                 ▼                  ▼
+     Codex          Claude Code          ChatGPT
+       │                 │                  │
+       └─────────────────┼──────────────────┘
+                         │
+                       Work
+                         │
+                         ▼
+                      Evidence
+```
+
+The product must not require a custom agent runtime.
+
+Interfaces may include:
+
+```text
+MCP
+plugin
+CLI
+hooks
+API
+filesystem
+Agent Skills
+```
+
+These are adapters.
+
+---
+
+# 20. Cross-Domain Requirement
+
+The product must not become "coding memory".
+
+A single user's experience may come from:
+
+```text
+research
+coursework
+competitive programming
+performance engineering
+software projects
+analysis
+```
+
+The architecture must allow useful patterns to cross project boundaries when justified.
+
+Example:
+
+```text
+OS coursework
+      +
+systems interview
+      +
+performance optimization
+      ↓
+reusable memory-hierarchy mental model /
+performance-analysis procedure
+```
+
+The system should discover this connection rather than requiring the user to reorganize their notes manually.
+
+---
+
+# 21. Competitive Positioning
+
+## Versus WorkGraph
+
+WorkGraph's core abstraction is excellent:
+
+```text
+coding session
+→ repo-scoped reusable engineering experience
+```
+
+Our extension is:
+
+```text
+heterogeneous experience
+→ project experience
+→ cross-project consolidation
+→ future-agent behavior
+```
+
+### Advantage
+
+- not repo-bound;
+- not coding-bound;
+- consolidation across projects/domains is first-class;
+- experience can compile into multiple forms, not only project artifacts.
+
+WorkGraph may become an ingestion source rather than something to replace.
+
+---
+
+## Versus skillmem
+
+skillmem models durable procedural skills with evidence, provenance and reinforcement extremely well.
+
+Our ontology is broader:
+
+```text
+skills
++
+decisions
++
+failures
++
+state
++
+evaluators
++
+outcomes
++
+artifacts
++
+environment
+```
+
+### Advantage
+
+The system can preserve experience that is valuable but cannot reasonably be represented as a "skill".
+
+We should borrow its evidence/provenance philosophy rather than compete with it as a skill store.
+
+---
+
+## Versus Letta Trajectory
+
+Letta standardizes the representation of agent experience across harnesses and uses those trajectories for memory formation.
+
+### Advantage
+
+Trajectory is an input format.
+
+Our primary value begins after normalization:
+
+```text
+trajectory
+→ interpretation
+→ consolidation
+→ reusable behavior
+```
+
+Whenever possible, compatibility is preferable to reinvention.
+
+---
+
+## Versus Mem0 / Supermemory
+
+These systems already provide cross-agent persistence, retrieval and memory infrastructure. Supermemory now explicitly focuses on its memory engine/API, while its coding-agent integrations unify project memories across multiple agents.
+
+### Advantage
+
+We do not compete on:
+
+```text
+"can agent B remember what agent A knew?"
+```
+
+We compete on:
+
+```text
+"what should agent B learn from what agent A experienced?"
+```
+
+Their infrastructure could serve as storage.
+
+---
+
+## Versus Basic Memory
+
+Basic Memory offers portable, project-scoped structured knowledge accessible through MCP, including decisions and project documentation.
+
+### Advantage
+
+Basic Memory assumes something meaningful has already been written.
+
+Our core function is upstream:
+
+```text
+work
+→ derive what is worth preserving
+→ continuously consolidate it
+```
+
+---
+
+## Versus LifeOS
+
+LifeOS is a broad personal AI harness with goals, identity, state, memory, skills, routing and self-improvement.
+
+We should not compete with LifeOS as a life operating system.
+
+### Advantage / Wedge
+
+Our product has one narrow responsibility:
+
+```text
+experience accumulation for future agents
+```
+
+It should work **inside, alongside or below** broader systems such as LifeOS.
+
+Its narrowness is strategic.
+
+---
+
+## Versus Pieces
+
+Pieces automatically captures workflow context from applications and makes it searchable.
+
+### Advantage
+
+Pieces captures:
+
+```text
+what happened around the user
+```
+
+We compile:
+
+```text
+what should future agents do differently because it happened
+```
+
+Pieces could become a source adapter.
+
+---
+
+# 22. Core Differentiators
+
+The initial product must win on six dimensions.
+
+## 22.1 Experience, not memory
+
+The canonical unit is:
+
+```text
+task
+→ attempts
+→ corrections
+→ outcome
+→ evidence
+→ reusable lesson
+```
+
+not an isolated text memory.
+
+---
+
+## 22.2 Cross-project consolidation
+
+The system discovers when experiences from multiple projects support the same reusable pattern.
+
+This is not optional.
+
+It is one of the main reasons the layer should exist separately from repo-local memory.
+
+---
+
+## 22.3 Typed experience
+
+Different knowledge behaves differently:
+
+```text
+state expires
+decision may be superseded
+failure prevents repetition
+heuristic has scope/confidence
+skill is executable
+evaluator verifies
+artifact is referenced
+```
+
+Treating all of these as homogeneous "memories" loses useful semantics.
+
+---
+
+## 22.4 Evidence-aware evolution
+
+Experiences can:
+
+```text
+strengthen
+weaken
+generalize
+narrow
+conflict
+supersede
+archive
+```
+
+while preserving provenance.
+
+---
+
+## 22.5 Context compilation
+
+The system does not only retrieve memories.
+
+It transforms them into the format most useful to the current agent and task.
+
+---
+
+## 22.6 Near-zero maintenance
+
+The user should not become the database administrator.
+
+The product must derive experience automatically from normal work.
+
+Human intervention primarily occurs through normal conversation:
+
+```text
+correcting the agent
+accepting/rejecting results
+stating constraints
+```
+
+---
+
+# 23. Architecture
+
+```text
+                         SOURCES
+────────────────────────────────────────────────
+Codex / Claude / ChatGPT / other agents
+Git / terminal / files / benchmark / submissions
+experiments / documents / external feedback
+                         │
+                         ▼
+                 Source Adapters
+                         │
+                         ▼
+              Trajectory Normalizer
+                         │
+                         ▼
+                       Episode
+                         │
+                         ▼
+              Experience Extractor
+                         │
+                         ▼
+              Candidate Experiences
+                         │
+                         ▼
+                Consolidation Engine
+             ┌───────────┼───────────┐
+             │           │           │
+           merge       conflict    generalize
+           narrow      reinforce   supersede
+             │           │           │
+             └───────────┼───────────┘
+                         ▼
+               Experience Repository
+                         │
+                         ▼
+                  Retrieval Engine
+                         │
+                         ▼
+                  Context Compiler
+                         │
+       ┌─────────────────┼─────────────────┐
+       ▼                 ▼                 ▼
+     Brief              Skill            Eval
+       │                 │                 │
+       └─────────────────┼─────────────────┘
+                         ▼
+                    Future Agent
+                         │
+                         ▼
+                       Work
+                         │
+                         ▼
+                      Evidence
+                         │
+                         └───────────────→ loop
+```
+
+---
+
+# 24. Storage Is Not the Product
+
+Possible storage systems:
+
+```text
+SQLite
+Postgres
+Markdown
+Supermemory
+Mem0
+Basic Memory
+Graph DB
+hybrid indexes
+```
+
+must remain replaceable.
+
+The semantic layer belongs to this product.
+
+The database does not define the ontology.
+
+---
+
+# 25. MVP
+
+The first version should prove one loop:
+
+```text
+past work
+→ reusable experience
+→ next agent uses it
+→ measurable improvement
+```
+
+Nothing else matters until this works.
+
+---
+
+# 26. MVP Source Support
+
+Support only:
+
+```text
+Codex
+Claude Code
+```
+
+initially.
+
+Optionally ingest a standardized trajectory representation where possible.
+
+Do not begin with every consumer chat platform.
+
+---
+
+# 27. MVP Experience Types
+
+Only implement:
+
+```text
+State
+Decision
+Outcome
+Failure
+Heuristic
+Procedure
+Evaluator
+Artifact Reference
+```
+
+Do not design a giant ontology.
+
+---
+
+# 28. MVP Flow
+
+After an agent session:
+
+```text
+session trajectory
+       ↓
+episode
+       ↓
+experience extraction
+       ↓
+automatic persistence
+       ↓
+consolidation with existing experience
+```
+
+Before another session:
+
+```text
+new task
+       ↓
+retrieve relevant experience
+       ↓
+compile brief
+       ↓
+inject into agent
+```
+
+After result:
+
+```text
+tests / benchmark / user correction / outcome
+       ↓
+feedback
+       ↓
+update experiences
+```
+
+---
+
+# 29. MVP User Experience
+
+The ideal user interaction is mostly invisible.
+
+Normal:
+
+```text
+codex
+> optimize this kernel
+```
+
+Later:
+
+```text
+claude
+> investigate this similar kernel
+```
+
+Claude automatically receives:
+
+```text
+Relevant prior experience
+
+- Similar workload previously became memory-bandwidth bound.
+- Strategy A was attempted twice and regressed performance.
+- Strategy B improved workload X by 14%; applicability to this shape is uncertain.
+- Benchmark script /path/... is already available.
+- Validate correctness before comparing latency.
+```
+
+The user should not have to remember that this experience exists.
+
+---
+
+# 30. Optional Review Surface
+
+A review UI can exist, but is not part of the critical path.
+
+It can show:
+
+```text
+New experiences
+Strengthened experiences
+Conflicts
+Generalizations
+Superseded state
+```
+
+Possible actions:
+
+```text
+correct
+delete
+pin
+narrow scope
+promote
+```
+
+No daily inbox-zero workflow.
+
+No mandatory "approve all memories".
+
+---
+
+# 31. MVP Benchmark
+
+The most important experiment compares:
+
+```text
+same agent
+same task family
+without accumulated experience
+```
+
+against:
+
+```text
+same agent
+same task family
+with accumulated experience
+```
+
+Measure:
+
+### Context Reconstruction
+
+```text
+manual re-explanation
+```
+
+↓ lower is better.
+
+### Repeated Failure Rate
+
+How often does the agent repeat an already-known failed approach?
+
+↓ lower.
+
+### Artifact Reuse
+
+Does the agent rediscover something that already exists?
+
+↓ lower redundant work.
+
+### Time / Turns to Useful Result
+
+↓ lower.
+
+### Evaluator Adoption
+
+Does the agent apply known tests/benchmarks/checks without being reminded?
+
+↑ higher.
+
+### Retrieval Precision
+
+How much injected experience was actually relevant?
+
+↑ higher.
+
+### Stale / Harmful Experience
+
+How often does historical experience make the task worse?
+
+↓ lower.
+
+---
+
+# 32. Dogfood Domains
+
+Use three deliberately different environments.
+
+## Research
+
+Tests:
+
+```text
+long-term project state
+decision continuity
+artifact provenance
+```
+
+## Competitive Programming / Coursework
+
+Tests:
+
+```text
+cross-task heuristic reuse
+failure-pattern accumulation
+```
+
+Human learning tracking is optional here.
+
+## Performance Optimization
+
+Tests:
+
+```text
+experiment consolidation
+automatic evaluators
+repeated failed-search avoidance
+cross-project heuristic formation
+```
+
+These domains prevent the architecture from collapsing into another coding-memory system.
+
+---
+
+# 33. Primary Product Risks
+
+## Experience pollution
+
+Too much low-value information makes future agents worse.
+
+Mitigation:
+
+```text
+high extraction threshold
+typed experience
+consolidation
+retrieval quality metrics
+```
+
+---
+
+## False generalization
+
+A single success becomes a universal rule.
+
+Mitigation:
+
+```text
+scope
+confidence
+evidence count
+contradictory evidence
+```
+
+---
+
+## Stale state
+
+Past state is incorrectly treated as current.
+
+Mitigation:
+
+```text
+temporal semantics
+supersession
+freshness-sensitive retrieval
+```
+
+---
+
+## Prompt-injection persistence
+
+Untrusted content becomes durable instructions.
+
+Mitigation:
+
+Strict distinction between:
+
+```text
+source data
+derived experience
+trusted policy/instruction
+```
+
+Imported or inferred experience must never silently become high-authority instructions.
+
+skillmem's provenance/trust separation is a useful precedent here.
+
+---
+
+## Excess maintenance
+
+The system becomes another thing the user must curate.
+
+Mitigation:
+
+```text
+automatic capture
+automatic extraction
+automatic consolidation
+human correction through normal interaction
+```
+
+---
+
+# 34. Core API
+
+Conceptually:
+
+```text
+observe(source)
+```
+
+Capture work.
+
+```text
+normalize(source)
+    → Episode
+```
+
+Create harness-independent experience representation.
+
+```text
+extract(Episode)
+    → Experience[]
+```
+
+Find potentially reusable experience.
+
+```text
+consolidate(Experience[])
+```
+
+Merge, reinforce, contradict, generalize, narrow and supersede.
+
+```text
+retrieve(TaskContext)
+    → Experience[]
+```
+
+Select relevant history.
+
+```text
+compile(TaskContext, Experience[])
+    → AgentContext
+```
+
+Convert experience to actionable context.
+
+```text
+feedback(Result)
+```
+
+Use new outcomes as evidence.
+
+---
+
+# 35. First Technical Milestone
+
+v0.1 is complete when:
+
+1. A Codex or Claude Code session can be ingested automatically.
+2. The system extracts decisions, outcomes, failures and evaluators.
+3. Extracted experience persists without mandatory human approval.
+4. Each item retains source provenance.
+5. A second session on a related task automatically receives relevant prior experience.
+6. The second agent avoids at least one redundant explanation, repeated failure or repeated discovery because of that experience.
+7. Result evidence can strengthen, weaken or supersede an existing experience.
+8. The full lifecycle is inspectable.
+
+Nothing more is necessary.
+
+---
+
+# 36. Product Moat Hypothesis
+
+The moat is not raw private data alone.
+
+It is:
+
+```text
+Private Experience
+        ×
+Consolidation History
+        ×
+Evidence
+        ×
+Evaluators
+        ×
+Task-specific Compilation
+```
+
+After sufficient use, two users with access to the same frontier agent should receive meaningfully different performance because their experience layers contain different accumulated trajectories.
+
+The system therefore ideally exhibits:
+
+```text
+value(t + 1) > value(t)
+```
+
+as real work accumulates.
+
+---
+
+# 37. North-Star Metric
+
+# Experience Reuse Rate
+
+> The percentage of meaningful new tasks in which historical experience changes useful agent behavior.
+
+Examples of "changes useful behavior":
+
+```text
+avoids a known trap
+uses an existing artifact
+preserves a previous decision
+selects a proven method
+runs the correct evaluator
+reuses a prior workflow
+rejects a previously failed path
+```
+
+This should grow over time without unacceptable increases in irrelevant-context injection.
+
+---
+
+# 38. One-Sentence Product Definition
+
+> **Personal Experience Layer automatically turns your past work with AI into scoped, evidence-linked experience that every future agent can inherit and reuse.**

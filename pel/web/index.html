@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PEL · Personal Experience Layer</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="PEL 首页"><span class="brand-mark">p<span>e</span>l</span><span>Personal<br>Experience Layer</span></a>
+    <div class="workspace-label">你的经验，持续积累</div>
+    <nav aria-label="主导航">
+      <button class="nav-item selected" data-view="experiences"><span class="nav-icon">◈</span>经验库 <span class="nav-count" id="nav-count">0</span></button>
+      <button class="nav-item" data-view="episodes"><span class="nav-icon">◷</span>工作片段</button>
+      <button class="nav-item" data-view="compiler"><span class="nav-icon">↗</span>上下文编译</button>
+    </nav>
+    <div class="sidebar-section">工作空间 <span>PROJECTS</span></div>
+    <div id="project-nav" class="project-nav"></div>
+    <div class="sidebar-bottom">
+      <div class="local-status"><span class="status-dot"></span> 本地存储 · 属于你</div>
+      <p>让下一位代理<br>继承你走过的路。</p>
+      <div class="sidebar-version">PEL <span>v0.1.0</span></div>
+    </div>
+  </aside>
+  <main>
+    <header class="topbar"><div>工作空间 <span>/</span> <strong id="breadcrumb">经验库</strong></div><div class="top-actions"><span class="offline-badge">离线提取</span><a href="/api/export" download="pel-export.json" class="text-button">导出数据 ↗</a></div></header>
+    <nav class="mobile-nav" aria-label="页面导航"><button class="mobile-nav-button selected" data-view="experiences">◈ 经验库</button><button class="mobile-nav-button" data-view="episodes">◷ 工作片段</button><button class="mobile-nav-button" data-view="compiler">↗ 上下文编译</button></nav>
+    <section class="page-heading"><div><div class="eyebrow">BUILD ON WHAT YOU’VE ALREADY LEARNED</div><h1 id="page-title">每一次工作，都成为下一次的经验。</h1><p id="page-description">从尝试、决策和结果中积累经验，为未来的代理提供恰当的上下文。</p></div><div class="heading-actions"><button class="secondary-button" id="demo-button">体验演示</button><button class="primary-button" id="import-button"><span>＋</span> 接入会话</button></div></section>
+    <section class="metrics" aria-label="经验概览">
+      <article><div class="metric-label">累积经验 <span>◈</span></div><div class="metric-value" id="metric-total">0</div><div class="metric-caption"><span class="green-dot"></span> 从工作片段中提取</div></article>
+      <article><div class="metric-label">工作片段 <span>◷</span></div><div class="metric-value" id="metric-episodes">0</div><div class="metric-caption">跨代理，保留完整来源</div></article>
+      <article><div class="metric-label">跨项目归纳 <span>↗</span></div><div class="metric-value" id="metric-generalized">0</div><div class="metric-caption">独立证据支持的候选模式</div></article>
+      <article><div class="metric-label">等待更多证据 <span>◇</span></div><div class="metric-value" id="metric-candidates">0</div><div class="metric-caption">自动保存，按证据建立信任</div></article>
+    </section>
+    <section class="view" id="experiences-view">
+      <div class="section-top"><div><h2>可复用经验 <span id="experience-count">0</span></h2><p>经验会演进，来源始终可查。</p></div><label class="search-box"><span>⌕</span><input id="search" type="search" placeholder="搜索决策、陷阱、方法…" aria-label="搜索经验"><kbd>/</kbd></label></div>
+      <div class="filter-row"><div class="type-filters" id="type-filters"></div><select id="status-filter" aria-label="生命周期筛选"><option value="">所有状态</option><option value="active">有外部证据</option><option value="candidate">候选经验</option><option value="disputed">存在争议</option><option value="superseded">已被替代</option><option value="archived">已归档</option><option value="rejected">已拒绝</option><option value="quarantined">已隔离</option></select></div>
+      <div class="experience-grid" id="experience-grid"></div>
+      <div class="empty-state" id="empty-state" hidden><span>◈</span><h3>经验，从一次工作开始。</h3><p>接入 Codex 或 Claude Code 会话，自动提取值得保留的经验。<br>也可以加载演示，探索完整的经验生命周期。</p><button class="primary-button" id="empty-demo">加载演示经验</button></div>
+      <footer class="collection-footer"><span><span class="status-dot"></span> 经验自动保存，无需逐条审批</span><span id="audit-status">生命周期记录可查</span></footer>
+    </section>
+    <section class="view" id="episodes-view" hidden><div class="section-top"><div><h2>工作片段</h2><p>从发生了什么，到下一次可以复用什么。</p></div></div><div id="episode-list" class="episode-list"></div></section>
+    <section class="view" id="compiler-view" hidden>
+      <div class="section-top"><div><h2>为下一次任务编译经验</h2><p>按任务、范围、证据与预算，选择足够有用的上下文。</p></div></div>
+      <div class="compiler-layout"><form class="compiler-form" id="compiler-form"><label>下一次任务<textarea id="task-input" required rows="4" placeholder="例如：优化 ragged reduction 的延迟，复用基准脚本并检查正确性。"></textarea></label><label>项目目录<input id="compile-project" required placeholder="项目的绝对路径" list="projects-list"></label><datalist id="projects-list"></datalist><div class="form-row"><label>领域<input id="compile-domain" placeholder="performance / research" list="domains-list"></label><datalist id="domains-list"></datalist><label>目标代理<select id="compile-agent"><option value="claude">Claude Code</option><option value="codex">Codex</option><option value="any">任意代理</option></select></label></div><div class="form-row"><label>输出形式<select id="compile-format"><option value="brief">任务简报</option><option value="rule">规则参考</option><option value="skill">流程参考</option><option value="evaluator">评估参考</option></select></label><label>预算上限<input id="compile-budget" type="number" value="4096" min="256" max="65536" required></label></div><div class="form-row"><label>任务阶段<select id="compile-phase"><option value="act">执行</option><option value="plan">规划</option><option value="verify">验证</option></select></label><label>任务 ID（可选）<input id="compile-task-id" placeholder="检索任务范围的经验"></label></div><button class="primary-button" type="submit">编译上下文 ↗</button><p class="form-note">导出的内容是带来源的历史参考。流程和命令不会被自动执行。</p></form><div class="context-output"><div class="output-top"><span>AGENT CONTEXT</span><button class="text-button" id="copy-context" disabled>复制 ↗</button></div><div class="output-meta" id="output-meta">为代理准备最少且足够的经验</div><pre id="context-text">填写任务，查看相关经验如何影响下一步工作。</pre></div></div>
+    </section>
+  </main>
+  <dialog id="detail-dialog" class="detail-dialog"><div class="dialog-top"><div class="eyebrow">EXPERIENCE LIFECYCLE</div><button class="icon-button close-dialog" aria-label="关闭详情">×</button></div><div id="detail-content"></div><form id="feedback-form"><h3>补充反馈</h3><div class="form-row"><label>如何更新<select id="feedback-action"><option value="strengthen">结果支持这条经验</option><option value="weaken">结果削弱这条经验</option><option value="correct">纠正经验</option><option value="narrow">缩小适用范围</option><option value="pin">固定</option><option value="unpin">取消固定</option><option value="promote">人工确认</option><option value="archive">归档</option><option value="reject">拒绝</option></select></label></div><label id="correction-field" hidden>纠正后的经验<textarea id="correction-input" rows="3" maxlength="2000"></textarea></label><div id="narrow-fields" class="form-row" hidden><label>适用范围<select id="narrow-scope"><option value="project">项目</option><option value="task">任务</option></select></label><label>项目路径或任务 ID<input id="narrow-key"></label></div><label>结果或原因<textarea id="feedback-reason" rows="2" placeholder="例如：在第二个工作负载上复测，正确性与延迟均符合预期。" required maxlength="2000"></textarea></label><button type="submit" class="primary-button">保存反馈</button></form></dialog>
+  <dialog id="import-dialog"><div class="dialog-top"><div><div class="eyebrow">CAPTURE → EXPERIENCE</div><h2>接入一次工作</h2></div><button class="icon-button close-dialog" aria-label="关闭导入">×</button></div><p class="dialog-description">选择原生会话文件，经验将自动提取并保存。后续可通过 CLI 监听或 Hooks 持续接入。</p><form id="import-form"><label class="upload-zone">＋<strong>选择 JSON / JSONL 会话</strong><span id="file-label">Codex · Claude Code · 标准化 Episode</span><input id="import-file" type="file" accept=".json,.jsonl" required></label><div class="form-row"><label>来源<select id="import-source"><option value="auto">自动识别</option><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="episode">标准化 Episode</option></select></label><label>领域（可选）<input id="import-domain" placeholder="例如：performance"></label></div><label>项目目录（源文件未提供时必填）<input id="import-project" placeholder="留空则读取会话中的目录"></label><div id="import-result" class="form-note"></div><button type="submit" class="primary-button">提取并保存经验 ↗</button></form></dialog>
+  <div class="toast" id="toast" role="status" hidden></div>
+</body>
+</html>

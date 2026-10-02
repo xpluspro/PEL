@@ -1,0 +1,626 @@
+# Competitive Landscape
+
+**Date:** 2026-10-02  
+**Purpose:** Determine what should be reused, integrated, or differentiated rather than rebuilt.
+
+---
+
+# 1. Market Structure
+
+The market is converging on several adjacent primitives:
+
+```text
+Raw activity capture
+        ↓
+Trajectory normalization
+        ↓
+Memory
+        ↓
+Skills
+        ↓
+Personal / agent harness
+```
+
+However, these layers are still fragmented.
+
+The target product is not intended to replace all of them.
+
+Its target layer is:
+
+```text
+Past human-agent work
+        ↓
+Experience compilation
+        ↓
+Cross-task consolidation
+        ↓
+Reusable agent experience
+        ↓
+Task-specific context / skill / evaluator
+        ↓
+Future agent
+```
+
+The distinction is important:
+
+> The core problem is not storing more information.  
+> The core problem is converting previous work into experience that changes how future agents work.
+
+---
+
+# 2. WorkGraph
+
+## Positioning
+
+WorkGraph watches Codex and Claude Code sessions and compiles them into repo-scoped engineering intelligence.
+
+Its generated artifacts include:
+
+- project journey;
+- work items;
+- known traps;
+- recurring failure patterns;
+- repo rules;
+- generated eval candidates;
+- reusable skills;
+- future-agent briefs.
+
+The project's own Codex proposal explicitly distinguishes itself from raw memory storage: its useful unit is a compiled work episode containing task, attempts, corrections, verification, lessons and evals.
+
+## What it gets right
+
+Its strongest insight is:
+
+```text
+conversation ≠ useful unit
+
+work episode = useful unit
+```
+
+It also demonstrates that passive session capture can produce reusable downstream artifacts without requiring users to write documentation manually.
+
+## Limitations relative to our target
+
+Based on its current public design, WorkGraph is strongly:
+
+```text
+coding-centric
+repo-centric
+session-centric
+```
+
+The abstraction ends largely around:
+
+```text
+session → repo intelligence
+```
+
+Our target must continue:
+
+```text
+session
+→ project experience
+→ cross-project experience
+→ reusable domain/personal experience
+→ future-agent context
+```
+
+Example:
+
+WorkGraph can learn:
+
+> In repo A, touching `paymentClient.ts` requires test X.
+
+Our target should additionally be able to learn:
+
+> Across several performance projects, this class of memory-layout change repeatedly caused cache-line contention; surface that heuristic and evaluator when a new performance task exhibits the same conditions.
+
+## What to reuse
+
+Do not reinvent its central episode-compilation insight.
+
+Potential compatibility:
+
+```text
+WorkGraph output
+        ↓
+Experience ingestion adapter
+        ↓
+our consolidation layer
+```
+
+---
+
+# 3. skillmem
+
+## Positioning
+
+skillmem provides persistent skills for Claude Code and Codex.
+
+Its lifecycle is:
+
+```text
+learn
+→ recall
+→ reinforce
+→ decay
+```
+
+It records provenance, separates owner/agent/imported/derived memories, and only lets external evidence—such as passing tests, accepted diffs or user confirmation—increase skill strength. Agent self-assertion alone cannot promote a skill. It also maintains tamper-evident history.
+
+## What it gets right
+
+Three ideas are especially important:
+
+### Evidence should change confidence
+
+```text
+"the agent thinks this was useful"
+```
+
+must not be equivalent to:
+
+```text
+"this method produced a verified success"
+```
+
+### Memory requires lifecycle
+
+Useful experience can become:
+
+```text
+stronger
+weaker
+stale
+archived
+```
+
+rather than existing forever as equally trusted text.
+
+### Provenance matters
+
+Derived knowledge should remain distinguishable from user-authored instructions.
+
+## Limitations relative to our target
+
+The core ontology is still primarily:
+
+```text
+skill memory
+```
+
+But useful experience is broader than skills.
+
+Future agents also need:
+
+```text
+current state
+decisions
+failed approaches
+environment facts
+artifacts
+evaluators
+constraints
+heuristics
+open questions
+```
+
+A failed experiment may be highly valuable without becoming a skill.
+
+A project decision may be extremely important without having a strength score.
+
+## What to reuse
+
+Evidence-weighting and provenance semantics are worth adopting conceptually.
+
+Do not limit the entire product to a skill-strength model.
+
+---
+
+# 4. Letta Trajectory / Letta Code
+
+## Positioning
+
+Letta introduced `trajectory` as a standardized, token-efficient representation of agent experience across harnesses such as Claude Code, Codex and Letta Code.
+
+Letta Code can normalize and search trajectories from other harnesses, and its dreaming process can use these trajectories to consolidate persistent memory.
+
+Letta's research thesis explicitly identifies the deeper problem:
+
+> LLMs are good at using context but do not reliably create durable context for future tasks.
+
+## What it gets right
+
+Letta solves an important lower-level interoperability problem:
+
+```text
+Claude Code session
+Codex session
+Letta session
+       ↓
+common trajectory representation
+```
+
+This is valuable infrastructure.
+
+## Limitations relative to our target
+
+Trajectory normalization answers:
+
+> What happened in a form another system can read?
+
+It does not fully answer:
+
+> Which parts of what happened should become reusable experience?
+
+or:
+
+> How should multiple experiences be consolidated into a stronger, scoped rule/evaluator/decision for future tasks?
+
+## What to reuse
+
+Where practical, support trajectory-style normalized inputs rather than creating another proprietary transcript format.
+
+Our product should sit downstream:
+
+```text
+Trajectory
+    ↓
+Experience Compiler
+    ↓
+Consolidation
+```
+
+---
+
+# 5. Mem0 / OpenMemory
+
+## Positioning
+
+OpenMemory provides a private persistent MCP memory layer that can be shared across MCP-compatible agents. Its product goal is seamless context handoff across tools and coding agents.
+
+## What it gets right
+
+It solves:
+
+```text
+Agent A knows X
+     ↓
+persistent memory
+     ↓
+Agent B can recall X
+```
+
+This is an important infrastructure primitive.
+
+## Limitation relative to our target
+
+Persistent memory and experience compilation are different problems.
+
+A memory layer can store:
+
+> We use PostgreSQL.
+
+Our target needs to derive:
+
+> PostgreSQL was selected over MongoDB because requirements X/Y mattered; if those requirements change, revisit the decision.
+
+Or:
+
+> Three previous attempts at approach A failed under conditions X and Y; future agents should test B first.
+
+The differentiation therefore cannot be:
+
+> We have cross-agent memory.
+
+That market already exists.
+
+## What to reuse
+
+Mem0/OpenMemory could eventually act as one storage/retrieval backend.
+
+The product ontology must remain backend-independent.
+
+---
+
+# 6. Supermemory
+
+## Positioning
+
+Supermemory currently positions itself as memory and continual-learning infrastructure across models and harnesses.
+
+Its plugins combine Claude Code, Codex, Cursor and OpenCode memories into a common workspace organized by project, and its product offers API/MCP/plugin surfaces.
+
+Notably, Supermemory discontinued its Nova personal knowledge-management product in September 2026 to focus on the memory engine/API.
+
+## What it gets right
+
+Supermemory provides mature infrastructure around:
+
+- memory ingestion;
+- extraction;
+- retrieval;
+- memory graph;
+- cross-agent integration;
+- storage;
+- MCP/API integration;
+- self-hosting.
+
+## Strategic lesson
+
+This is evidence against spending product effort on:
+
+```text
+another generic memory database
+another personal knowledge UI
+another vector retrieval engine
+```
+
+These are increasingly infrastructure commodities.
+
+## Differentiation requirement
+
+Our layer must be useful even if Supermemory is the underlying memory engine.
+
+That means:
+
+```text
+Supermemory = where experience may live
+
+Our product = what experience means,
+              how it evolves,
+              and what the next agent receives
+```
+
+---
+
+# 7. Basic Memory
+
+## Positioning
+
+Basic Memory creates project-scoped knowledge bases backed by Markdown and exposes them to agents through MCP.
+
+It explicitly supports structured project documentation such as architecture decisions, guides and patterns, and its MCP interface supports typed notes such as `decision`.
+
+## What it gets right
+
+It offers several attractive design properties:
+
+- human-inspectable canonical data;
+- agent-readable and writable storage;
+- project scope;
+- typed notes;
+- low vendor lock-in.
+
+## Limitation relative to our target
+
+Basic Memory is primarily a knowledge substrate.
+
+It does not make experience compilation itself the primary abstraction.
+
+The user/agent still needs to decide what should become:
+
+```text
+decision
+note
+pattern
+documentation
+```
+
+Our product should automate the upstream transformation:
+
+```text
+work happened
+    ↓
+derive useful reusable experience
+    ↓
+possibly store in Basic Memory
+```
+
+---
+
+# 8. LifeOS
+
+## Positioning
+
+LifeOS is the most important broad competitor.
+
+It describes itself as a harness layer that knows the user's goals, people and context and adds persistent memory, custom skills, routing and self-improvement above general-purpose AI harnesses.
+
+Its current Cortex memory architecture includes hot memory, typed knowledge, learnings and work history; LifeOS also maintains state and change tracking.
+
+## What it gets right
+
+LifeOS takes seriously the idea that:
+
+```text
+model/harness = replaceable capability
+
+persistent personal infrastructure = durable layer
+```
+
+It is much broader and more mature than an isolated memory plugin.
+
+## Difference in product center
+
+LifeOS is primarily organized around:
+
+```text
+Human current state
+→ goals / ideal state
+→ AI system that helps move toward them
+```
+
+Our product center should remain significantly narrower:
+
+```text
+Work already performed
+→ reusable experience
+→ future agents inherit it
+```
+
+This matters strategically.
+
+Competing with LifeOS as a general life operating system would create massive scope and little differentiation.
+
+The product should instead be something that could theoretically **plug into LifeOS**.
+
+---
+
+# 9. Pieces
+
+## Positioning
+
+PiecesOS continuously captures workflow context, including screens, copied code and audio, and makes it available through timeline, search and summaries.
+
+## What it gets right
+
+Pieces solves passive capture.
+
+This matters because requiring the user to manually record every useful interaction is unsustainable.
+
+## Limitation relative to our target
+
+Capture answers:
+
+> What did the user see/do?
+
+Our product must answer:
+
+> What from that experience should alter future agent behavior?
+
+Therefore:
+
+```text
+Capture ≠ Compilation
+```
+
+Pieces-style systems could serve as source adapters.
+
+---
+
+# 10. Competitive Matrix
+
+| Capability | WorkGraph | skillmem | Letta | Mem0 / Supermemory | Basic Memory | LifeOS | Target Product |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Cross-session persistence | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Cross-agent / harness | partial | ✓ | ✓ | ✓ | ✓ via MCP | increasingly | **core** |
+| Passive trajectory ingestion | ✓ coding | partial | ✓ | partial | — | hooks | **core** |
+| Episode compilation | **✓** | partial | partial | partial | — | partial | **core** |
+| Failure/trap extraction | ✓ | partial | — | generic memory | manual | learning | **core** |
+| Decision extraction | ✓/repo | — | memory | generic | ✓ manual | ✓ | **core** |
+| Evaluator extraction | ✓ | evidence use | — | — | — | verification | **core** |
+| Skill extraction | ✓ | **core** | learning | memory | manual | ✓ | **core** |
+| Evidence/provenance | partial | **strong** | trajectory source | varies | source files | ledger/history | **core** |
+| Cross-project consolidation | limited | skill DB | possible | memory graph | separate projects | broad personal | **core** |
+| Cross-domain consolidation | no clear focus | no | no clear focus | generic | no | broad | **core** |
+| Context compilation | briefs | recall | memory/context | retrieval | build/search | routing | **core differentiator** |
+| Backend-independent semantics | limited | no | format-level | backend itself | backend itself | harness | **required** |
+| Human approval required for every write | no | trust for rules | no | no | configurable | varies | **no** |
+| Future-agent behavior is primary output | ✓ coding | ✓ skills | ✓ memory | ✓ memory | ✓ knowledge | broader LifeOS | **yes** |
+
+The comparison is architectural rather than a feature-score ranking.
+
+---
+
+# 11. Strategic Conclusion
+
+The market has already commoditized or is rapidly commoditizing:
+
+```text
+persistent memory
+vector retrieval
+MCP access
+cross-agent memory
+trajectory normalization
+basic skill persistence
+personal knowledge storage
+```
+
+The product should not compete primarily on those dimensions.
+
+The open product opportunity is narrower:
+
+# Persistent Experience Compilation
+
+Specifically:
+
+```text
+many heterogeneous past work episodes
+        ↓
+typed reusable experience
+        ↓
+automatic consolidation across tasks/projects
+        ↓
+confidence + provenance + scope
+        ↓
+task-specific behavioral context
+        ↓
+future agent
+```
+
+The durable differentiation is not:
+
+> We remember more.
+
+It is:
+
+> **We convert what already happened into better behavior by the next agent.**
+
+---
+
+# 12. Ideas to Adopt, Not Reinvent
+
+From WorkGraph:
+
+```text
+episode > conversation
+failure patterns
+future-agent briefs
+generated evaluators
+```
+
+From skillmem:
+
+```text
+provenance
+external evidence
+reinforcement / weakening
+trust boundary between data and instructions
+```
+
+From Letta:
+
+```text
+cross-harness trajectory normalization
+```
+
+From Supermemory / Mem0:
+
+```text
+memory infrastructure
+retrieval infrastructure
+cross-agent connectivity
+```
+
+From Basic Memory:
+
+```text
+inspectable portable representation
+typed knowledge
+```
+
+From LifeOS:
+
+```text
+harness independence
+persistent layer above replaceable models
+```
+
+From Pieces:
+
+```text
+automatic/passive capture
+```
+
+Our job is to connect these primitives into a coherent **experience lifecycle**, not rebuild each primitive ourselves.

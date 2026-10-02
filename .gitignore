@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+.pel/
+build/
+dist/
+*.sqlite3*
+.claude/settings.local.json
+.playwright-cli/
+output/
+
