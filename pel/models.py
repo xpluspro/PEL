@@ -208,7 +208,7 @@ def reconstruct_tasks(events: list[Event], objective: str = "") -> list[dict[str
         attempt["end_line"] = event.line
         if event.role == "user" and len(attempt["event_ids"]) > 1:
             attempt["corrections"].append(event.text)
-        if event.role == "tool":
+        if event.role == "tool" and event.metadata.get("noise") not in {"harness_tool_result", "harness_wrapper"}:
             exit_code = event.metadata.get("exit_code")
             if exit_code not in (None, 0):
                 attempt["results"].append({"status": "failed", "event_id": event.id})

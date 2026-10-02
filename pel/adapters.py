@@ -104,7 +104,7 @@ def normalize(
         seen.add(key)
         observed = timestamp(row.get("timestamp") or row.get("observed_at") or fallback_time)
         event_metadata = dict(metadata or {})
-        if _WRAPPER_TEXT.search(text):
+        if _WRAPPER_TEXT.search(text) and "noise" not in event_metadata:
             event_metadata["noise"] = "harness_wrapper"
         events.append(Event(event_id or uid("evt", role, kind, text), role, kind, text, observed, line, event_metadata))
 
@@ -171,6 +171,8 @@ def normalize(
                     elif ptype in ("function_call_output", "custom_tool_call_output"):
                         output = payload.get("output", "")
                         metadata = dict(calls.get(str(payload.get("call_id")), {}))
+                        if metadata.get("tool_name") in {"exec", "functions.exec", "run_officejs"}:
+                            metadata["noise"] = "harness_tool_result"
                         if isinstance(output, str) and output.lstrip().startswith("{"):
                             try:
                                 decoded = json.loads(output)

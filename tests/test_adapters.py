@@ -24,6 +24,16 @@ class AdapterTests(unittest.TestCase):
         self.assertNotIn("Hidden reasoning", str(episode.to_dict()))
         self.assertNotIn("Secret system", str(episode.to_dict()))
 
+    def test_harness_tool_results_are_retained_but_not_treated_as_work_evidence(self):
+        episode = self.normalize([
+            {"type": "session_meta", "payload": {"id": "harness", "cwd": "."}},
+            {"type": "response_item", "payload": {"type": "custom_tool_call", "call_id": "h1", "name": "exec", "input": {"cmd": "python -m pytest"}}},
+            {"type": "response_item", "payload": {"type": "custom_tool_call_output", "call_id": "h1", "output": "Script completed\n12 passed"}},
+        ])
+        self.assertEqual(len(episode.events), 1)
+        self.assertEqual(episode.events[0].metadata.get("noise"), "harness_tool_result")
+        self.assertFalse(any(RuleExtractor().extract(episode)))
+
     def test_codex_exec_results_preserve_real_exit_code(self):
         episode = self.normalize([
             {"type": "thread.started", "thread_id": "a"},

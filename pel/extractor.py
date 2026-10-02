@@ -40,7 +40,7 @@ _PATTERNS = (
 _COMPILED = [(kind, re.compile(pattern, re.IGNORECASE)) for kind, pattern in _PATTERNS]
 _CHECK_COMMAND = re.compile(r"(?:pytest|unittest|(?:npm|pnpm|yarn|cargo|go)\s+test|ctest|benchmark|bench[._/]|correctness|验证|基准)", re.IGNORECASE)
 _TEST_OUTPUT = re.compile(r"(?:\d+\s+passed|\bOK\b|\bPASS\b|tests? passed|correctness.*passed)", re.IGNORECASE)
-_NARRATIVE = re.compile(r"(?:我会|我先|接下来|下一步|已完成|回放|测试结果|隐私|包装文本|真实样本|I will|I’ll|Next,? I|I(?:'|’)ll)", re.IGNORECASE)
+_NARRATIVE = re.compile(r"(?:我会|我先|接下来|下一步|已完成|回放|测试结果|隐私|包装文本|真实样本|需要特别说明|从这次真实会话|当前经验保存在|这类结论|I will|I’ll|Next,? I|I(?:'|’)ll)", re.IGNORECASE)
 
 
 def _compact_event_text(event: Event, pattern: re.Pattern[str], limit: int = 350) -> str:
@@ -61,7 +61,7 @@ class RuleExtractor:
         results: list[Candidate] = []
         for event in episode.events:
             metadata = event.metadata
-            if metadata.get("noise") == "harness_wrapper":
+            if metadata.get("noise") in {"harness_wrapper", "harness_tool_result"}:
                 continue
             if event.role == "tool":
                 command = str(metadata.get("command", ""))
@@ -151,13 +151,18 @@ class RuleExtractor:
             if len(events) < 2:
                 continue
             text = "\n".join(e.text for e in events)
-            usable = [e for e in events if not _is_narrative(e) and e.metadata.get("noise") != "harness_wrapper"]
+            usable = [e for e in events if not _is_narrative(e) and e.metadata.get("noise") not in {"harness_wrapper", "harness_tool_result"}]
             failures = [e for e in usable if (e.role == "tool" and (e.metadata.get("exit_code") not in (None, 0) or e.metadata.get("is_error")))
                         or re.search(r"(?:failed|regressed|does not work|失败|回退|错误)", e.text, re.I)]
             successes = [e for e in usable if (e.role == "tool" and e.metadata.get("exit_code") == 0)
                          or re.search(r"(?:passed|succeeded|improved|通过|成功|提升)", e.text, re.I)]
             corrections = [e for e in usable if e.role == "user" and e is not events[0]]
             if not failures or not successes:
+                continue
+            external_success = [e for e in successes if e.role == "tool" and e.metadata.get("noise") not in {"harness_tool_result", "harness_wrapper"}]
+            if not external_success:
+                # A complete reusable lesson needs an externally observed
+                # result. Assistant/user self-reports stay as context only.
                 continue
             failed_text = _compact_event_text(failures[-1], re.compile(r"(?:failed|error|regress|reject|失败|错误|回退)", re.I))
             success_text = _compact_event_text(successes[-1], re.compile(r"(?:passed|success|improv|completed|通过|成功|提升)", re.I))
@@ -167,6 +172,8 @@ class RuleExtractor:
             attrs = {"task_id": task.get("task_id", ""), "attempt_id": attempt.get("attempt_id", ""),
                          "constraints": [task.get("objective", episode.objective)] if task.get("objective") else [],
                          "extraction": "complete_attempt"}
+            if _is_narrative(successes[-1]) or _is_narrative(failures[-1]):
+                continue
             results.append(Candidate(
                 "heuristic", statement, successes[-1], "runtime_result", 0.55,
                     scope="project", scope_key=episode.project, semantic_key=task.get("task_id", ""),
