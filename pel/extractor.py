@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from typing import Protocol
 
-from .models import Candidate, Episode, TYPES
+from .models import Candidate, Episode, TYPES, Event
 from .safety import clean_statement, suspicious
 
 
@@ -120,8 +120,45 @@ class RuleExtractor:
                 attrs["authority"] = "source_data"
                 results.append(Candidate(kind, statement, event, evidence_kind, confidence, scope, scope_key,
                                          str(metadata.get("key") or ""), attrs, suspicious(event.text)))
+        # Reconstruct complete attempts before semantic extraction.  A useful
+        # lesson often spans a failed command, a user correction and a later
+        # successful verification; none of those lines is sufficient alone.
+        by_id = {event.id: event for event in episode.events}
+        for task in episode.tasks:
+            # Corrections open a new attempt, but the reusable conclusion spans the whole task.
+            events = [by_id[eid] for eid in task.get("event_ids", []) if eid in by_id]
+            attempt = task.get("attempts", [{}])[-1]
+            if len(events) < 2:
+                continue
+            text = "\n".join(e.text for e in events)
+            failures = [e for e in events if (e.role == "tool" and (e.metadata.get("exit_code") not in (None, 0) or e.metadata.get("is_error")))
+                        or re.search(r"(?:failed|regressed|does not work|失败|回退|错误)", e.text, re.I)]
+            successes = [e for e in events if (e.role == "tool" and e.metadata.get("exit_code") == 0)
+                         or re.search(r"(?:passed|succeeded|improved|通过|成功|提升)", e.text, re.I)]
+            corrections = [e for e in events if e.role == "user" and e is not events[0]]
+            if not failures or not successes:
+                continue
+            failed_text = failures[-1].text.strip().replace("\n", " ")[:350]
+            success_text = successes[-1].text.strip().replace("\n", " ")[:350]
+            correction = corrections[-1].text.strip().replace("\n", " ")[:250] if corrections else ""
+            statement = f"Attempt evidence: failed approach: {failed_text}; corrected by: {correction or 'a subsequent change'}; verified result: {success_text}."
+            support = [*failures, *successes, *corrections]
+            attrs = {"task_id": task.get("task_id", ""), "attempt_id": attempt.get("attempt_id", ""),
+                         "constraints": [task.get("objective", episode.objective)] if task.get("objective") else [],
+                         "extraction": "complete_attempt"}
+            results.append(Candidate(
+                "heuristic", statement, successes[-1], "runtime_result", 0.55,
+                    scope="project", scope_key=episode.project, semantic_key=task.get("task_id", ""),
+                    attributes=attrs, quarantined=any(suspicious(e.text) for e in events),
+                    events=events, supporting_events=support, refuting_events=failures,
+                    conclusion=statement, applicability=[task.get("objective", episode.objective)],
+                    recommended_action=correction or "Prefer the corrected approach and reproduce the verification.",
+                    verification_method=next((e.metadata.get("command", "") for e in successes if e.metadata.get("command")), "Repeat the recorded verification under the same conditions."),
+                uncertainty=[u for a in task.get("attempts", []) for u in a.get("unresolved", [])],
+            ))
         # Bounded selection prefers failures/evaluators/decisions over incidental state.
         order = {t: i for i, t in enumerate(("failure", "evaluator", "decision", "outcome", "procedure", "heuristic", "artifact", "state"))}
         results.sort(key=lambda c: order[c.type])
+        # Keep the complete-attempt conclusions even when line-level extraction
+        # is noisy, while retaining the bounded import contract.
         return results[:200]
-

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .models import Episode, Event, now, project_key, timestamp, uid
+from .models import Episode, Event, now, project_key, reconstruct_tasks, timestamp, uid
 from .safety import redact
 
 MAX_SOURCE_BYTES = 32 * 1024 * 1024
@@ -218,7 +218,8 @@ def normalize(
     created = min((e.observed_at for e in events), default=fallback_time)
     latest = max((e.observed_at for e in events), default=fallback_time)
     digest = uid("digest", [(e.id, e.role, e.kind, e.text, e.metadata) for e in events], objective, domain)
-    return Episode(episode_id, source, session_id, source_uri, selected_project, domain, objective, events, created, latest, digest, warnings)
+    tasks = reconstruct_tasks(events, objective)
+    return Episode(episode_id, source, session_id, source_uri, selected_project, domain, objective, events, created, latest, digest, warnings, tasks)
 
 
 def normalize_file(path: str | Path, **kwargs: Any) -> Episode:
@@ -227,3 +228,19 @@ def normalize_file(path: str | Path, **kwargs: Any) -> Episode:
         raise ValueError("Session exceeds the 32 MiB import limit")
     return normalize(path.read_text(encoding="utf-8-sig"), source_uri=str(path), **kwargs)
 
+
+def normalize_stream(stream: Any, **kwargs: Any) -> Episode:
+    """Normalize a text stream with bounded chunk reads.
+
+    JSONL sessions are read incrementally so callers can feed a growing log or
+    a pipe without first materializing it themselves.  ``normalize`` remains
+    the canonical parser for a single document and partial trailing records.
+    """
+    chunks: list[str] = []
+    total = 0
+    for chunk in iter(lambda: stream.read(1024 * 1024), ""):
+        total += len(chunk.encode("utf-8"))
+        if total > MAX_SOURCE_BYTES:
+            raise ValueError("Session exceeds the 32 MiB import limit")
+        chunks.append(chunk)
+    return normalize("".join(chunks), **kwargs)

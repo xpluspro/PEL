@@ -4,15 +4,21 @@
 
 ## 初版实现重点
 
-从空目录实现可运行的本地经验生命周期。按照新版竞品分析，把主要工作放在 typed experience、证据与范围、跨项目归纳和任务编译；数据库、HTTP UI 和代理 CLI 都是可替换的外围组件。
+从空目录实现可运行的本地经验生命周期。当前 MVP 的主流程已经前移到：
+
+```text
+会话事件 → 任务与尝试重建 → 模型提炼经验 → 证据核验 → 跨会话整理 → 可复用经验
+```
+
+数据库、HTTP UI 和代理 CLI 继续作为支撑组件；核心提取以完整任务尝试为输入，而不是逐行摘要。
 
 | 需求 / 竞品启示 | 初版实现 | 验证 |
 | --- | --- | --- |
-| WorkGraph：Episode 而非简单聊天归档 | 归一化用户目标、代理消息、工具动作与结果；提取重要经验，忽略系统提示与隐藏推理 | Codex rollout / exec 和 Claude fixture |
+| WorkGraph：Episode 而非简单聊天归档 | 归一化用户目标、代理消息、工具动作与结果；重建跨尝试任务，保留原始事件 ID 与行号 | Codex rollout / exec 和 Claude fixture |
 | skillmem：外部结果才增强经验 | 区分 agent inference、测试、运行结果、用户纠正；自述重复不增加强度 | 重复自述、真实 exit code、反馈测试 |
 | Letta：跨 harness 输入边界 | 独立 normalizer 与 Episode JSON 格式 | 两种原生输入与标准化输入 |
 | Mem0 / Supermemory：存储不定义产品语义 | Repository Protocol；Engine 不依赖 SQL；JSON 全量导出 | 重开数据库、便携导出 |
-| Basic Memory：来源与结果可检查 | 每条经验链接来源片段、Episode、证据、生命周期与编译选择 | inspect / HTTP 详情 / audit 验证 |
+| Basic Memory：来源与结果可检查 | 每条经验链接多处支持 / 反驳证据、Episode、任务尝试、生命周期与编译选择 | inspect / HTTP 详情 / audit 验证 |
 | LifeOS：代理可替换，经验属于用户 | 同一个本地库服务 Codex / Claude，没有自建 agent runtime | 两种 CLI 包装器测试 |
 | Pieces：自动 / 被动抓取 | 指定目录监听；Claude Prompt / Stop / SessionEnd Hooks | 文件追加、半行重试、Hook 幂等 |
 | 核心差异：跨项目合并与归纳 | 明确的独立 Episode 阈值、条件匹配、领域限制、依赖撤回 | 跨项目与条件隔离测试 |
@@ -49,10 +55,12 @@
 - 浏览器实测经验列表、类型筛选、项目筛选、证据查看、编译、反馈与窄屏布局；截图保存在 `output/playwright/`。
 - JavaScript 语法检查与 Python 编译检查。
 - wheel 构建、隔离安装与打包后 UI 资源验证通过。
+- 真实样本回放：`examples/codex-session.jsonl` 生成 7 条经验；跨尝试 heuristic 关联 3 条证据（1 条失败反驳、2 条支持），并保留 `python -m unittest tests.test_ragged` 作为验证方法。
+- 当前运行环境未暴露本次 Codex 对话的原始 rollout 文件；已扫描 `~/.codex`，未发现可直接导入的 session JSONL，因此没有把合成当前对话事件冒充真实会话。
 
 ## 有意保留的后续工作
 
-真实任务 A/B 回放；LLM / 语义检索；更加细致的多任务会话分段；语义近似合并与自动条件归纳；任务依赖图；Letta / WorkGraph 原生格式；MCP / 第三方存储适配器；可执行 Agent Skills 与 evaluator 包。
+真实任务 A/B 效果回放（10–20 个真实会话）；LLM 语义提炼器；更细的多任务会话分段；自动条件归纳；任务依赖图；Letta / WorkGraph 原生格式；MCP / 第三方存储适配器；可执行 Agent Skills 与 evaluator 包。
 
 这些没有被伪装为已实现能力。初版提供可替换接口与可检查数据，供下一轮用真实任务评估提取质量、经验复用和有害历史影响。
 

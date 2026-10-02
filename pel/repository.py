@@ -30,6 +30,16 @@ def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+def _experience(value: dict) -> Experience:
+    # Databases created before the task reconstruction fields are still
+    # readable and are upgraded lazily on write.
+    value.setdefault("applicability", [])
+    value.setdefault("recommended_action", "")
+    value.setdefault("verification_method", "")
+    value.setdefault("uncertainty", [])
+    return Experience(**value)
+
+
 class SQLiteRepository:
     def __init__(self, path: str | Path):
         self.path = str(Path(path).expanduser().resolve()) if str(path) != ":memory:" else ":memory:"
@@ -103,10 +113,10 @@ class SQLiteRepository:
         row = self.connection.execute("SELECT body FROM experiences WHERE id=?", (experience_id,)).fetchone()
         if not row:
             raise KeyError(f"Experience not found: {experience_id}")
-        return Experience(**json.loads(row[0]))
+        return _experience(json.loads(row[0]))
 
     def experiences(self) -> list[Experience]:
-        return [Experience(**json.loads(row[0])) for row in self.connection.execute("SELECT body FROM experiences ORDER BY rowid DESC")]
+        return [_experience(json.loads(row[0])) for row in self.connection.execute("SELECT body FROM experiences ORDER BY rowid DESC")]
 
     def save(self, experience: Experience) -> None:
         self.connection.execute(
@@ -159,4 +169,3 @@ class SQLiteRepository:
             "audit": [{**dict(row), "details": json.loads(row["details"])} for row in self.connection.execute("SELECT * FROM audit ORDER BY sequence")],
             "compilations": self.compilations(),
         }
-

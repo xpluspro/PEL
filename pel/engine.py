@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .extractor import Extractor, RuleExtractor
-from .models import Candidate, Episode, Experience, SCOPES, TaskContext, normalized, now, project_key, timestamp, token_cost, uid
+from .models import Candidate, Episode, Experience, SCOPES, TaskContext, reconstruct_tasks, normalized, now, project_key, timestamp, token_cost, uid
 from .repository import Repository
 from .safety import clean_statement, redact, suspicious
 
@@ -37,6 +37,23 @@ def _polarity(statement: str) -> int:
     return 0
 
 
+def _semantic_match(left: str, right: str) -> bool:
+    if normalized(left) == normalized(right):
+        return True
+    # Conservative lexical semantics for the offline MVP.  Explicitly
+    # opposite conclusions are never merged, even when most terms overlap.
+    if _polarity(left) * _polarity(right) == -1:
+        return False
+    # Version numbers, benchmark values and shape IDs usually denote distinct
+    # observations even when the surrounding wording is identical.
+    if set(re.findall(r"\d+(?:\.\d+)?", left)) != set(re.findall(r"\d+(?:\.\d+)?", right)):
+        return False
+    a, b = terms(left), terms(right)
+    if not a or not b:
+        return False
+    return len(a & b) / max(1, len(a | b)) >= 0.85
+
+
 class ExperienceEngine:
     def __init__(self, repository: Repository, extractor: Extractor | None = None):
         self.repo = repository
@@ -57,6 +74,7 @@ class ExperienceEngine:
                 episode.events = [Event(**e) for e in previous["events"] if e["id"] not in incoming_ids] + episode.events
                 episode.created_at = min(previous["created_at"], episode.created_at)
                 episode.last_observed_at = max(previous["last_observed_at"], episode.last_observed_at)
+                episode.tasks = reconstruct_tasks(episode.events, episode.objective)
             self.repo.save_episode(episode)
             for candidate in candidates:
                 self._consolidate(episode, candidate, counts)
@@ -64,21 +82,58 @@ class ExperienceEngine:
             self.repo.audit("observed", episode.id, {k: v for k, v in counts.items() if k != "warnings"})
         return counts
 
+    def validate_evidence(self, episode: Episode, evidence: dict) -> bool:
+        """Check citation integrity and tool call/result correspondence.
+
+        This validation is intentionally factual: it verifies that a cited
+        event exists in the imported episode and that a tool result carries a
+        command or tool identity when one is claimed.  It never upgrades a
+        conclusion merely because a model supplied a confidence value.
+        """
+        event = next((e for e in episode.events if e.id == evidence.get("event_id")), None)
+        if event is None or evidence.get("episode_id") != episode.id:
+            return False
+        if event.role == "tool":
+            metadata = event.metadata or {}
+            if metadata.get("tool_name") and not (metadata.get("command") or event.text):
+                return False
+            if evidence.get("kind") in EXTERNAL and metadata.get("exit_code") is None and not metadata.get("is_error"):
+                # Free-form benchmark output may omit an exit code; retain it
+                # only when there is visible result text.
+                return bool(event.text.strip())
+        return bool(event.text.strip())
+
     def _consolidate(self, episode: Episode, candidate: Candidate, counts: dict) -> None:
-        evidence_id = uid("ev", episode.id, candidate.event.id, candidate.type, normalized(candidate.statement))
-        evidence = {
-            "id": evidence_id, "episode_id": episode.id, "event_id": candidate.event.id,
-            "kind": candidate.evidence_kind, "source": episode.source, "source_uri": episode.source_uri,
-            "line": candidate.event.line, "observed_at": candidate.event.observed_at,
-            "snippet": redact(candidate.event.text)[:4000], "authority": "source_data",
-            "project": episode.project, "domain": episode.domain,
-        }
-        if not self.repo.save_evidence(evidence):
+        source_events = candidate.events or [candidate.event]
+        support_ids = {e.id for e in (candidate.supporting_events or source_events)}
+        refute_ids = {e.id for e in candidate.refuting_events}
+        evidence_ids: list[str] = []
+        for event in source_events:
+            relation = "refutes" if event.id in refute_ids else ("supports" if event.id in support_ids else "context")
+            evidence_id = uid("ev", episode.id, event.id, candidate.type, normalized(candidate.statement), relation)
+            evidence = {
+                "id": evidence_id, "episode_id": episode.id, "event_id": event.id,
+                "kind": candidate.evidence_kind, "relation": relation, "source": episode.source, "source_uri": episode.source_uri,
+                "line": event.line, "observed_at": event.observed_at,
+                "snippet": redact(event.text)[:4000], "authority": "source_data",
+                "project": episode.project, "domain": episode.domain,
+            }
+            # Independent validation happens before a conclusion can consume a
+            # citation.  A missing event or malformed tool pairing is ignored.
+            if self.validate_evidence(episode, evidence):
+                self.repo.save_evidence(evidence)
+                evidence_ids.append(evidence_id)
+        if not evidence_ids:
             return
+        evidence_id = evidence_ids[0]
         scope_key = candidate.scope_key or episode.project
         experiences = self.repo.experiences()
         matches = [e for e in experiences if e.type == candidate.type and e.scope == candidate.scope and e.scope_key == scope_key
-                   and normalized(e.statement) == normalized(candidate.statement) and _conditions(e) == _conditions(candidate)]
+                   and _conditions(e) == _conditions(candidate)
+                   and (normalized(e.statement) == normalized(candidate.statement)
+                        or (candidate.type != "state" and candidate.semantic_key and e.semantic_key == candidate.semantic_key
+                            and _polarity(e.statement) * _polarity(candidate.statement) != -1)
+                        or _semantic_match(e.statement, candidate.statement))]
         # A rejection or correction must survive reimporting the same assertion.
         existing = matches[0] if matches else None
         if existing and candidate.type == "state" and existing.lifecycle_state == "superseded" and candidate.semantic_key and not existing.attributes.get("retired_by_feedback"):
@@ -89,7 +144,13 @@ class ExperienceEngine:
         if existing:
             before = existing.confidence
             prior_episodes = {self.repo.evidence(eid).get("episode_id") for eid in existing.evidence_ids}
-            existing.evidence_ids.append(evidence_id)
+            existing.evidence_ids = sorted(set(existing.evidence_ids + evidence_ids))
+            existing.attributes.setdefault("supporting_evidence_ids", [])
+            existing.attributes.setdefault("refuting_evidence_ids", [])
+            for eid in evidence_ids:
+                relation = self.repo.evidence(eid).get("relation")
+                key = "refuting_evidence_ids" if relation == "refutes" else "supporting_evidence_ids"
+                existing.attributes[key] = sorted(set(existing.attributes[key] + [eid]))
             existing.related_tasks = sorted(set(existing.related_tasks + [episode.id]))
             existing.last_observed_at = max(existing.last_observed_at, candidate.event.observed_at)
             if candidate.quarantined:
@@ -107,14 +168,23 @@ class ExperienceEngine:
             self.repo.audit(action, existing.id, {"evidence_id": evidence_id, "confidence_before": before, "confidence_after": existing.confidence})
             return
         experience_id = uid("xp", candidate.type, normalized(candidate.statement), candidate.scope, scope_key, _conditions(candidate), evidence_id)
+        evidence_kinds = [self.repo.evidence(eid).get("kind") for eid in evidence_ids]
+        evidence_confidence = min(0.95, 0.4 + 0.15 * sum(kind in EXTERNAL for kind in evidence_kinds) + 0.05 * max(0, len(set(evidence_ids)) - 1))
         experience = Experience(
             experience_id, candidate.type, candidate.statement, episode.project, episode.domain,
             candidate.scope, scope_key, candidate.confidence,
             "quarantined" if candidate.quarantined else ("active" if candidate.evidence_kind in EXTERNAL else "candidate"),
             candidate.event.observed_at, candidate.event.observed_at, candidate.semantic_key,
-            [evidence_id], [episode.id], [str(candidate.attributes["artifact_uri"])] if candidate.attributes.get("artifact_uri") else [],
-            attributes={**candidate.attributes, "authority": "source_data"},
+            evidence_ids, [episode.id], [str(candidate.attributes["artifact_uri"])] if candidate.attributes.get("artifact_uri") else [],
+            attributes={**candidate.attributes, "authority": "source_data",
+                        "supporting_evidence_ids": [eid for eid in evidence_ids if self.repo.evidence(eid).get("relation") != "refutes"],
+                        "refuting_evidence_ids": [eid for eid in evidence_ids if self.repo.evidence(eid).get("relation") == "refutes"]},
+            applicability=list(candidate.applicability), recommended_action=candidate.recommended_action,
+            verification_method=candidate.verification_method, uncertainty=list(candidate.uncertainty),
         )
+        # The extractor's score is only a prior.  Persisted credibility is
+        # derived from independently cited records and their provenance.
+        experience.confidence = min(candidate.confidence, evidence_confidence) if candidate.evidence_kind == "agent_inference" else evidence_confidence
         if experience.semantic_key and not candidate.quarantined:
             related = [e for e in experiences if e.semantic_key == experience.semantic_key and e.scope == experience.scope
                        and e.scope_key == experience.scope_key and e.type == experience.type and e.lifecycle_state in RETRIEVABLE]
@@ -276,7 +346,21 @@ class ExperienceEngine:
 
     def inspect(self, experience_id: str) -> dict:
         experience = self.repo.get(experience_id)
-        return {"experience": experience.to_dict(), "evidence": [self.repo.evidence(eid) for eid in experience.evidence_ids], "history": self.repo.history(experience_id)}
+        evidence = [self.repo.evidence(eid) for eid in experience.evidence_ids]
+        return {"experience": experience.to_dict(), "evidence": evidence,
+                "validation": self.validate_experience(experience, evidence), "history": self.repo.history(experience_id)}
+
+    def validate_experience(self, experience: Experience, evidence: list[dict] | None = None) -> dict:
+        """Validate citations without treating model confidence as proof."""
+        evidence = evidence if evidence is not None else [self.repo.evidence(eid) for eid in experience.evidence_ids]
+        ids = {item.get("id") for item in evidence}
+        missing = [eid for eid in experience.evidence_ids if eid not in ids]
+        supporting = [item for item in evidence if item.get("relation") != "refutes"]
+        refuting = [item for item in evidence if item.get("relation") == "refutes"]
+        return {"valid": not missing and bool(supporting), "missing_evidence": missing,
+                "supporting": len(supporting), "refuting": len(refuting),
+                "independent_episodes": len({item.get("episode_id") for item in evidence if item.get("episode_id")}),
+                "confidence_from_evidence": round(min(0.95, 0.4 + 0.15 * sum(item.get("kind") in EXTERNAL for item in supporting) + 0.05 * max(0, len(supporting) - 1)), 3)}
 
     def retrieve(self, context: TaskContext, limit: int = 30) -> list[dict]:
         query = terms(context.task)
@@ -358,7 +442,11 @@ class ExperienceEngine:
                         # JSON quoting preserves source text as an explicitly delimited value.
                         payload = {"id": experience["id"], "lesson": experience["statement"], "scope": experience["scope"],
                                    "status": experience["lifecycle_state"], "confidence": round(experience["confidence"], 2),
-                                   "evidence": evidence["id"], "source": f"{evidence['source_uri']}:{evidence['line']}"}
+                                   "evidence": experience["evidence_ids"], "source": f"{evidence['source_uri']}:{evidence['line']}"}
+                        for field, key in (("conditions", "applicability"), ("action", "recommended_action"),
+                                           ("verification", "verification_method"), ("uncertain", "uncertainty")):
+                            if experience.get(key):
+                                payload[field] = experience[key]
                         if experience["contradicted_by"]:
                             payload["conflicts"] = experience["contradicted_by"]
                         if experience["attributes"].get("constraints"):
@@ -397,4 +485,3 @@ class ExperienceEngine:
                 "generalizations": sum(bool(e.generalizes) and e.lifecycle_state in RETRIEVABLE for e in experiences),
                 "projects": sorted({e.project for e in experiences if e.project}),
                 "domains": sorted({e.domain for e in experiences if e.domain})}
-

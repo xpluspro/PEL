@@ -76,6 +76,9 @@ class Episode:
     last_observed_at: str
     digest: str
     warnings: list[str] = field(default_factory=list)
+    # Reconstructed work graph.  Older databases may omit this field; callers
+    # can still use the normalized event stream.
+    tasks: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -93,6 +96,24 @@ class Candidate:
     semantic_key: str = ""
     attributes: dict[str, Any] = field(default_factory=dict)
     quarantined: bool = False
+    # A conclusion is usually supported by a complete attempt, rather than a
+    # single line.  ``event`` remains for source compatibility.
+    events: list[Event] = field(default_factory=list)
+    supporting_events: list[Event] = field(default_factory=list)
+    refuting_events: list[Event] = field(default_factory=list)
+    conclusion: str = ""
+    applicability: list[str] = field(default_factory=list)
+    recommended_action: str = ""
+    verification_method: str = ""
+    uncertainty: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not self.events:
+            self.events = [self.event]
+        if not self.supporting_events:
+            self.supporting_events = list(self.events)
+        if not self.conclusion:
+            self.conclusion = self.statement
 
 
 @dataclass
@@ -117,6 +138,10 @@ class Experience:
     generalizes: list[str] = field(default_factory=list)
     attributes: dict[str, Any] = field(default_factory=dict)
     pinned: bool = False
+    applicability: list[str] = field(default_factory=list)
+    recommended_action: str = ""
+    verification_method: str = ""
+    uncertainty: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -146,3 +171,51 @@ class TaskContext:
             raise ValueError("phase must be plan, act or verify")
         self.project = project_key(self.project)
 
+
+def reconstruct_tasks(events: list[Event], objective: str = "") -> list[dict[str, Any]]:
+    """Build a small, deterministic work graph from an event stream.
+
+    User messages start a task or a new attempt. Tool results and assistant
+    messages remain attached until the next user goal. Explicit task IDs are
+    respected, so the same task can be joined across imported sessions later.
+    This is deliberately source agnostic and keeps event IDs as evidence.
+    """
+    tasks: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+    attempt: dict[str, Any] | None = None
+    ordinal = 0
+    for event in events:
+        explicit = str(event.metadata.get("task_id") or "")
+        starts = event.role == "user" and event.kind in ("message", "prompt")
+        if current is None or (starts and explicit and explicit != current["task_id"]):
+            if current is not None:
+                tasks.append(current)
+            ordinal += 1
+            task_id = explicit or uid("task", objective or event.text, ordinal)
+            current = {"task_id": task_id, "objective": event.text if starts else objective,
+                       "event_ids": [], "attempts": [], "sessions": []}
+            attempt = None
+        if current is None:
+            continue
+        current["event_ids"].append(event.id)
+        current["sessions"].append(str(event.metadata.get("session_id") or "")) if event.metadata.get("session_id") else None
+        if starts or attempt is None:
+            attempt = {"attempt_id": uid("attempt", current["task_id"], len(current["attempts"])),
+                       "event_ids": [], "start_line": event.line, "end_line": event.line,
+                       "corrections": [], "results": [], "unresolved": []}
+            current["attempts"].append(attempt)
+        attempt["event_ids"].append(event.id)
+        attempt["end_line"] = event.line
+        if event.role == "user" and len(attempt["event_ids"]) > 1:
+            attempt["corrections"].append(event.text)
+        if event.role == "tool":
+            exit_code = event.metadata.get("exit_code")
+            if exit_code not in (None, 0):
+                attempt["results"].append({"status": "failed", "event_id": event.id})
+            elif exit_code == 0:
+                attempt["results"].append({"status": "passed", "event_id": event.id})
+        if re.search(r"(?:未解决|unknown|uncertain|不确定|待确认)", event.text, re.I):
+            attempt["unresolved"].append(event.text[:500])
+    if current is not None:
+        tasks.append(current)
+    return tasks
