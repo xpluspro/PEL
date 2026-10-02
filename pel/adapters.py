@@ -3,11 +3,21 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 from .models import Episode, Event, now, project_key, reconstruct_tasks, timestamp, uid
 from .safety import redact
+
+
+_WRAPPER_TEXT = re.compile(
+    r"^\s*(?:<local-command-(?:caveat|stdout)>|<command-(?:name|message|args)>|"
+    r"Script (?:failed|completed)|The supplied client history contains this tool call|"
+    r"Tool result replayed under run_officejs|"
+    r"(?:我先|接下来我会|下一步我会|已完成|真实样本回放|回放后发现|隐私检查通过|I will|Next,? I(?:’|\')ll|Completed|I\'ll ))",
+    re.IGNORECASE,
+)
 
 MAX_SOURCE_BYTES = 32 * 1024 * 1024
 
@@ -93,7 +103,10 @@ def normalize(
             return
         seen.add(key)
         observed = timestamp(row.get("timestamp") or row.get("observed_at") or fallback_time)
-        events.append(Event(event_id or uid("evt", role, kind, text), role, kind, text, observed, line, metadata or {}))
+        event_metadata = dict(metadata or {})
+        if _WRAPPER_TEXT.search(text):
+            event_metadata["noise"] = "harness_wrapper"
+        events.append(Event(event_id or uid("evt", role, kind, text), role, kind, text, observed, line, event_metadata))
 
     if source == "episode":
         if len(rows) != 1:
@@ -211,7 +224,7 @@ def normalize(
         raise ValueError("Source has no project directory; pass --project")
     selected_project = project_key(selected_project)
     if not objective:
-        objective = next((e.text for e in events if e.role == "user" and e.kind == "message"), "Imported agent session")
+        objective = next((e.text for e in events if e.role == "user" and e.kind == "message" and not e.metadata.get("noise")), "Imported agent session")
     # A file without session metadata retains its identity across appends and retries.
     session_id = session_id or uid("session", source_uri, selected_project)
     episode_id = uid("ep", source, session_id, selected_project)

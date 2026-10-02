@@ -40,6 +40,20 @@ _PATTERNS = (
 _COMPILED = [(kind, re.compile(pattern, re.IGNORECASE)) for kind, pattern in _PATTERNS]
 _CHECK_COMMAND = re.compile(r"(?:pytest|unittest|(?:npm|pnpm|yarn|cargo|go)\s+test|ctest|benchmark|bench[._/]|correctness|验证|基准)", re.IGNORECASE)
 _TEST_OUTPUT = re.compile(r"(?:\d+\s+passed|\bOK\b|\bPASS\b|tests? passed|correctness.*passed)", re.IGNORECASE)
+_NARRATIVE = re.compile(r"(?:我会|我先|接下来|下一步|已完成|回放|测试结果|隐私|包装文本|真实样本|I will|I’ll|Next,? I|I(?:'|’)ll)", re.IGNORECASE)
+
+
+def _compact_event_text(event: Event, pattern: re.Pattern[str], limit: int = 350) -> str:
+    """Keep a short, evidence-shaped summary while retaining full source events."""
+    lines = [line.strip() for line in event.text.splitlines() if line.strip()]
+    matching = [line for line in lines if pattern.search(line)]
+    chosen = matching[:3] or lines[:3] or [event.text.strip()]
+    text = " ".join(chosen)
+    return text[:limit]
+
+
+def _is_narrative(event: Event) -> bool:
+    return event.role == "assistant" and _NARRATIVE.search(event.text) is not None
 
 
 class RuleExtractor:
@@ -47,6 +61,8 @@ class RuleExtractor:
         results: list[Candidate] = []
         for event in episode.events:
             metadata = event.metadata
+            if metadata.get("noise") == "harness_wrapper":
+                continue
             if event.role == "tool":
                 command = str(metadata.get("command", ""))
                 exit_code = metadata.get("exit_code")
@@ -76,6 +92,10 @@ class RuleExtractor:
                     raise ValueError("statement must be a string")
                 segment = segment.strip().strip("-* ")
                 if not segment or len(segment) > 2000:
+                    continue
+                if metadata.get("noise") == "harness_wrapper" or re.match(r"^(?:我先|接下来我会|下一步我会|已完成|真实样本回放|回放后发现|隐私检查通过|I will|Next,? I(?:’|\')ll|Completed|I\'ll )", segment, re.I):
+                    continue
+                if event.role == "assistant" and not explicit_type and _NARRATIVE.search(segment):
                     continue
                 # Skip code/role delimiters and low-information acknowledgements.
                 if segment.startswith("```") or len(segment) < 12:
@@ -131,16 +151,17 @@ class RuleExtractor:
             if len(events) < 2:
                 continue
             text = "\n".join(e.text for e in events)
-            failures = [e for e in events if (e.role == "tool" and (e.metadata.get("exit_code") not in (None, 0) or e.metadata.get("is_error")))
+            usable = [e for e in events if not _is_narrative(e) and e.metadata.get("noise") != "harness_wrapper"]
+            failures = [e for e in usable if (e.role == "tool" and (e.metadata.get("exit_code") not in (None, 0) or e.metadata.get("is_error")))
                         or re.search(r"(?:failed|regressed|does not work|失败|回退|错误)", e.text, re.I)]
-            successes = [e for e in events if (e.role == "tool" and e.metadata.get("exit_code") == 0)
+            successes = [e for e in usable if (e.role == "tool" and e.metadata.get("exit_code") == 0)
                          or re.search(r"(?:passed|succeeded|improved|通过|成功|提升)", e.text, re.I)]
-            corrections = [e for e in events if e.role == "user" and e is not events[0]]
+            corrections = [e for e in usable if e.role == "user" and e is not events[0]]
             if not failures or not successes:
                 continue
-            failed_text = failures[-1].text.strip().replace("\n", " ")[:350]
-            success_text = successes[-1].text.strip().replace("\n", " ")[:350]
-            correction = corrections[-1].text.strip().replace("\n", " ")[:250] if corrections else ""
+            failed_text = _compact_event_text(failures[-1], re.compile(r"(?:failed|error|regress|reject|失败|错误|回退)", re.I))
+            success_text = _compact_event_text(successes[-1], re.compile(r"(?:passed|success|improv|completed|通过|成功|提升)", re.I))
+            correction = _compact_event_text(corrections[-1], re.compile(r".*"), 250) if corrections else ""
             statement = f"Attempt evidence: failed approach: {failed_text}; corrected by: {correction or 'a subsequent change'}; verified result: {success_text}."
             support = [*failures, *successes, *corrections]
             attrs = {"task_id": task.get("task_id", ""), "attempt_id": attempt.get("attempt_id", ""),
